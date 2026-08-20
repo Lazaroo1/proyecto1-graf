@@ -1,9 +1,14 @@
 use minifb::{Key, Window, WindowOptions};
 
+mod level;
+
 const WIDTH: usize = 800;
 const HEIGHT: usize = 600;
 
 fn main() {
+    let _level = level::Level::parse(include_str!("../assets/niveles/prueba.txt"))
+        .expect("No se pudo cargar el nivel de prueba");
+
     let mut window = Window::new(
         "Proyecto 1 - Ray Caster",
         WIDTH,
