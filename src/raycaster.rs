@@ -1,5 +1,6 @@
 use crate::level::{Level, EMPTY_TILE};
 use crate::player::Player;
+use crate::texture::WallTextures;
 
 pub const DEFAULT_FOV: f32 = std::f32::consts::FRAC_PI_3;
 
@@ -20,6 +21,7 @@ pub struct RayHit {
     pub distance: f32,
     pub wall_type: u8,
     pub side: HitSide,
+    pub texture_u: f32,
 }
 
 pub fn render(
@@ -27,6 +29,7 @@ pub fn render(
     width: usize,
     height: usize,
     level: &Level,
+    textures: &WallTextures,
     player: &Player,
     fov: f32,
 ) {
@@ -68,13 +71,21 @@ pub fn render(
             continue;
         };
 
-        let wall_height = (focal_length / hit.distance.max(MIN_DISTANCE)) as usize;
-        let draw_start = horizon.saturating_sub(wall_height / 2);
-        let draw_end = (horizon + wall_height.div_ceil(2)).min(height);
-        let color = wall_color(hit.wall_type, hit.side);
+        let wall_height = focal_length / hit.distance.max(MIN_DISTANCE);
+        let wall_top = horizon as f32 - wall_height * 0.5;
+        let wall_bottom = horizon as f32 + wall_height * 0.5;
+        let draw_start = wall_top.floor().max(0.0) as usize;
+        let draw_end = wall_bottom.ceil().min(height as f32) as usize;
 
         for row in draw_start..draw_end {
-            buffer[row * width + column] = color;
+            // `wall_top` no se recorta: así V permanece alineada aunque una
+            // pared cercana sea más alta que la ventana.
+            let texture_v = (row as f32 + 0.5 - wall_top) / wall_height;
+            let color = textures.sample(hit.wall_type, hit.texture_u, texture_v);
+            buffer[row * width + column] = match hit.side {
+                HitSide::Vertical => color,
+                HitSide::Horizontal => shade(color, 0.72),
+            };
         }
     }
 }
@@ -124,18 +135,26 @@ pub fn cast_ray(
             let y_wall = tile_at(level, map_x, next_y).filter(|tile| *tile != EMPTY_TILE);
 
             if let Some(wall_type) = x_wall {
-                return Some(RayHit {
+                return Some(make_hit(
                     distance,
                     wall_type,
-                    side: HitSide::Vertical,
-                });
+                    HitSide::Vertical,
+                    origin_x,
+                    origin_y,
+                    direction_x,
+                    direction_y,
+                ));
             }
             if let Some(wall_type) = y_wall {
-                return Some(RayHit {
+                return Some(make_hit(
                     distance,
                     wall_type,
-                    side: HitSide::Horizontal,
-                });
+                    HitSide::Horizontal,
+                    origin_x,
+                    origin_y,
+                    direction_x,
+                    direction_y,
+                ));
             }
 
             map_x = next_x;
@@ -150,11 +169,15 @@ pub fn cast_ray(
                 } else {
                     HitSide::Horizontal
                 };
-                return Some(RayHit {
+                return Some(make_hit(
                     distance,
                     wall_type,
                     side,
-                });
+                    origin_x,
+                    origin_y,
+                    direction_x,
+                    direction_y,
+                ));
             }
         } else if side_distance_x < side_distance_y {
             map_x += step_x;
@@ -163,11 +186,15 @@ pub fn cast_ray(
 
             let wall_type = tile_at(level, map_x, map_y)?;
             if wall_type != EMPTY_TILE {
-                return Some(RayHit {
+                return Some(make_hit(
                     distance,
                     wall_type,
-                    side: HitSide::Vertical,
-                });
+                    HitSide::Vertical,
+                    origin_x,
+                    origin_y,
+                    direction_x,
+                    direction_y,
+                ));
             }
         } else {
             map_y += step_y;
@@ -176,11 +203,15 @@ pub fn cast_ray(
 
             let wall_type = tile_at(level, map_x, map_y)?;
             if wall_type != EMPTY_TILE {
-                return Some(RayHit {
+                return Some(make_hit(
                     distance,
                     wall_type,
-                    side: HitSide::Horizontal,
-                });
+                    HitSide::Horizontal,
+                    origin_x,
+                    origin_y,
+                    direction_x,
+                    direction_y,
+                ));
             }
         }
     }
@@ -215,23 +246,32 @@ fn initial_step_and_distance(
     }
 }
 
-fn wall_color(wall_type: u8, side: HitSide) -> u32 {
-    let color = match wall_type {
-        1 => 0xD95757,
-        2 => 0x4B75D1,
-        3 => 0x4FAE68,
-        4 => 0xD6A84B,
-        5 => 0xA965C4,
-        6 => 0x45B8B0,
-        7 => 0xD97945,
-        8 => 0x8A96A8,
-        9 => 0xD96E9F,
-        _ => 0xFFFFFF,
+fn make_hit(
+    distance: f32,
+    wall_type: u8,
+    side: HitSide,
+    origin_x: f32,
+    origin_y: f32,
+    direction_x: f32,
+    direction_y: f32,
+) -> RayHit {
+    let wall_coordinate = match side {
+        HitSide::Vertical => origin_y + distance * direction_y,
+        HitSide::Horizontal => origin_x + distance * direction_x,
     };
+    let mut texture_u = wall_coordinate.rem_euclid(1.0);
 
-    match side {
-        HitSide::Vertical => color,
-        HitSide::Horizontal => shade(color, 0.72),
+    if (side == HitSide::Vertical && direction_x > 0.0)
+        || (side == HitSide::Horizontal && direction_y < 0.0)
+    {
+        texture_u = (1.0 - texture_u).rem_euclid(1.0);
+    }
+
+    RayHit {
+        distance,
+        wall_type,
+        side,
+        texture_u,
     }
 }
 
@@ -274,6 +314,15 @@ mod tests {
     }
 
     #[test]
+    fn calcula_u_desde_el_punto_exacto_de_impacto() {
+        let level = open_room();
+
+        let hit = cast_ray(&level, 1.5, 2.25, 1.0, 0.0).expect("debe tocar la pared este");
+
+        assert!((hit.texture_u - 0.75).abs() < DDA_EPSILON);
+    }
+
+    #[test]
     fn detecta_una_pared_justo_en_una_esquina() {
         let level = Level::parse("1111\n1P.1\n1.21\n1111").expect("el mapa debe ser válido");
 
@@ -290,16 +339,22 @@ mod tests {
             .expect("el nivel de prueba debe ser válido");
         let mut buffer = vec![0; 320 * 200];
         let player = Player::from(level.player_start);
+        let textures = WallTextures::load_embedded().expect("las texturas deben cargar");
 
-        render(&mut buffer, 320, 200, &level, &player, DEFAULT_FOV);
+        render(
+            &mut buffer,
+            320,
+            200,
+            &level,
+            &textures,
+            &player,
+            DEFAULT_FOV,
+        );
 
-        for wall_type in 1..=3 {
-            let front_color = wall_color(wall_type, HitSide::Vertical);
-            let side_color = wall_color(wall_type, HitSide::Horizontal);
-            assert!(
-                buffer.contains(&front_color) || buffer.contains(&side_color),
-                "debe verse la pared tipo {wall_type}"
-            );
-        }
+        let unique_colors = buffer
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<_>>();
+        assert!(unique_colors.len() > 32);
     }
 }

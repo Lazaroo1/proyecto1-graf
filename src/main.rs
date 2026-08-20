@@ -4,6 +4,7 @@ use std::time::Instant;
 mod level;
 mod player;
 mod raycaster;
+mod texture;
 
 const WIDTH: usize = 800;
 const HEIGHT: usize = 600;
@@ -15,6 +16,8 @@ fn main() {
     let level = level::Level::parse(include_str!("../assets/niveles/prueba.txt"))
         .expect("No se pudo cargar el nivel de prueba");
     let mut player = player::Player::from(level.player_start);
+    let textures = texture::WallTextures::load_embedded()
+        .expect("No se pudieron cargar las texturas de paredes");
 
     let mut window = Window::new(
         "Proyecto 1 - Ray Caster",
@@ -40,6 +43,7 @@ fn main() {
             WIDTH,
             HEIGHT,
             &level,
+            &textures,
             &player,
             raycaster::DEFAULT_FOV,
         );
