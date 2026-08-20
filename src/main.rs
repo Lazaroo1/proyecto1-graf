@@ -1,6 +1,7 @@
 use minifb::{Key, Window, WindowOptions};
 use std::time::Instant;
 
+mod fps_counter;
 mod level;
 mod mouse_look;
 mod player;
@@ -34,6 +35,8 @@ fn main() {
     let mut buffer = vec![0_u32; WIDTH * HEIGHT];
     let mut previous_frame = Instant::now();
     let mut mouse_look = mouse_look::MouseLook::new();
+    let mut fps_counter = fps_counter::FpsCounter::new();
+    let raycaster = raycaster::Raycaster::new(WIDTH, HEIGHT, raycaster::DEFAULT_FOV);
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let now = Instant::now();
@@ -42,18 +45,12 @@ fn main() {
 
         let mouse_delta_x = mouse_look.update(&mut window);
         update_player(&window, &level, &mut player, delta_time, mouse_delta_x);
-        raycaster::render(
-            &mut buffer,
-            WIDTH,
-            HEIGHT,
-            &level,
-            &textures,
-            &player,
-            raycaster::DEFAULT_FOV,
-        );
+        raycaster.render(&mut buffer, &level, &textures, &player);
+        fps_counter.draw(&mut buffer, WIDTH, HEIGHT);
         window
             .update_with_buffer(&buffer, WIDTH, HEIGHT)
             .expect("No se pudo actualizar la ventana");
+        fps_counter.frame_rendered();
     }
 
     mouse_look.release(&mut window);

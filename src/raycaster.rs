@@ -24,68 +24,87 @@ pub struct RayHit {
     pub texture_u: f32,
 }
 
-pub fn render(
-    buffer: &mut [u32],
+pub struct Raycaster {
     width: usize,
     height: usize,
-    level: &Level,
-    textures: &WallTextures,
-    player: &Player,
-    fov: f32,
-) {
-    assert_eq!(buffer.len(), width * height);
+    horizon: usize,
+    camera_plane_scale: f32,
+    focal_length: f32,
+    camera_x_by_column: Vec<f32>,
+}
 
-    let horizon = height / 2;
-    buffer[..horizon * width].fill(CEILING_COLOR);
-    buffer[horizon * width..].fill(FLOOR_COLOR);
+impl Raycaster {
+    pub fn new(width: usize, height: usize, fov: f32) -> Self {
+        assert!(width > 0 && height > 0);
 
-    if width == 0 || height == 0 {
-        return;
+        let fov = if fov.is_finite() {
+            fov.clamp(1.0_f32.to_radians(), 179.0_f32.to_radians())
+        } else {
+            DEFAULT_FOV
+        };
+        let camera_plane_scale = (fov * 0.5).tan();
+        let camera_x_by_column = (0..width)
+            .map(|column| {
+                if width == 1 {
+                    0.0
+                } else {
+                    2.0 * column as f32 / (width - 1) as f32 - 1.0
+                }
+            })
+            .collect();
+
+        Self {
+            width,
+            height,
+            horizon: height / 2,
+            camera_plane_scale,
+            focal_length: width as f32 / (2.0 * camera_plane_scale),
+            camera_x_by_column,
+        }
     }
 
-    let fov = if fov.is_finite() {
-        fov.clamp(1.0_f32.to_radians(), 179.0_f32.to_radians())
-    } else {
-        DEFAULT_FOV
-    };
-    let direction_x = player.angle.cos();
-    let direction_y = player.angle.sin();
-    let camera_plane_scale = (fov * 0.5).tan();
-    let plane_x = -direction_y * camera_plane_scale;
-    let plane_y = direction_x * camera_plane_scale;
-    let focal_length = width as f32 / (2.0 * camera_plane_scale);
+    pub fn render(
+        &self,
+        buffer: &mut [u32],
+        level: &Level,
+        textures: &WallTextures,
+        player: &Player,
+    ) {
+        assert_eq!(buffer.len(), self.width * self.height);
 
-    for column in 0..width {
-        let camera_x = if width == 1 {
-            0.0
-        } else {
-            2.0 * column as f32 / (width - 1) as f32 - 1.0
-        };
-        let ray_direction_x = direction_x + plane_x * camera_x;
-        let ray_direction_y = direction_y + plane_y * camera_x;
+        buffer[..self.horizon * self.width].fill(CEILING_COLOR);
+        buffer[self.horizon * self.width..].fill(FLOOR_COLOR);
 
-        // Como el plano es perpendicular a una dirección unitaria, el parámetro
-        // que devuelve el DDA equivale a la distancia perpendicular y evita fisheye.
-        let Some(hit) = cast_ray(level, player.x, player.y, ray_direction_x, ray_direction_y)
-        else {
-            continue;
-        };
+        let direction_x = player.angle.cos();
+        let direction_y = player.angle.sin();
+        let plane_x = -direction_y * self.camera_plane_scale;
+        let plane_y = direction_x * self.camera_plane_scale;
 
-        let wall_height = focal_length / hit.distance.max(MIN_DISTANCE);
-        let wall_top = horizon as f32 - wall_height * 0.5;
-        let wall_bottom = horizon as f32 + wall_height * 0.5;
-        let draw_start = wall_top.floor().max(0.0) as usize;
-        let draw_end = wall_bottom.ceil().min(height as f32) as usize;
-
-        for row in draw_start..draw_end {
-            // `wall_top` no se recorta: así V permanece alineada aunque una
-            // pared cercana sea más alta que la ventana.
-            let texture_v = (row as f32 + 0.5 - wall_top) / wall_height;
-            let color = textures.sample(hit.wall_type, hit.texture_u, texture_v);
-            buffer[row * width + column] = match hit.side {
-                HitSide::Vertical => color,
-                HitSide::Horizontal => shade(color, 0.72),
+        for (column, camera_x) in self.camera_x_by_column.iter().copied().enumerate() {
+            let ray_direction_x = direction_x + plane_x * camera_x;
+            let ray_direction_y = direction_y + plane_y * camera_x;
+            let Some(hit) = cast_ray(level, player.x, player.y, ray_direction_x, ray_direction_y)
+            else {
+                continue;
             };
+
+            let wall_height = self.focal_length / hit.distance.max(MIN_DISTANCE);
+            let wall_top = self.horizon as f32 - wall_height * 0.5;
+            let wall_bottom = self.horizon as f32 + wall_height * 0.5;
+            let draw_start = wall_top.floor().max(0.0) as usize;
+            let draw_end = wall_bottom.ceil().min(self.height as f32) as usize;
+            let texture_column = textures.column(
+                hit.wall_type,
+                hit.texture_u,
+                hit.side == HitSide::Horizontal,
+            );
+            let texture_step = wall_height.recip();
+            let mut texture_v = (draw_start as f32 + 0.5 - wall_top) * texture_step;
+
+            for row in draw_start..draw_end {
+                buffer[row * self.width + column] = texture_column.sample(texture_v);
+                texture_v += texture_step;
+            }
         }
     }
 }
@@ -275,13 +294,6 @@ fn make_hit(
     }
 }
 
-fn shade(color: u32, factor: f32) -> u32 {
-    let red = (((color >> 16) & 0xFF) as f32 * factor) as u32;
-    let green = (((color >> 8) & 0xFF) as f32 * factor) as u32;
-    let blue = ((color & 0xFF) as f32 * factor) as u32;
-    (red << 16) | (green << 8) | blue
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -340,16 +352,9 @@ mod tests {
         let mut buffer = vec![0; 320 * 200];
         let player = Player::from(level.player_start);
         let textures = WallTextures::load_embedded().expect("las texturas deben cargar");
+        let raycaster = Raycaster::new(320, 200, DEFAULT_FOV);
 
-        render(
-            &mut buffer,
-            320,
-            200,
-            &level,
-            &textures,
-            &player,
-            DEFAULT_FOV,
-        );
+        raycaster.render(&mut buffer, &level, &textures, &player);
 
         let unique_colors = buffer
             .iter()
