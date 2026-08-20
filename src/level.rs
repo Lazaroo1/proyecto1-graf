@@ -1,5 +1,5 @@
 pub const EMPTY_TILE: u8 = 0;
-pub const DEFAULT_PLAYER_ANGLE: f32 = 0.0;
+pub const DEFAULT_PLAYER_ANGLE: f32 = -std::f32::consts::FRAC_PI_2;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PlayerStart {
@@ -87,7 +87,10 @@ mod tests {
     fn parsea_paredes_y_posicion_inicial() {
         let level = Level::parse("111\n1P2\n133").expect("el mapa debe ser válido");
 
-        assert_eq!(level.tiles, vec![vec![1, 1, 1], vec![1, 0, 2], vec![1, 3, 3]]);
+        assert_eq!(
+            level.tiles,
+            vec![vec![1, 1, 1], vec![1, 0, 2], vec![1, 3, 3]]
+        );
         assert_eq!(
             level.player_start,
             PlayerStart {
