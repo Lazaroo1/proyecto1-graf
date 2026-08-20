@@ -8,18 +8,26 @@ pub struct PlayerStart {
     pub angle: f32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Goal {
+    pub x: f32,
+    pub y: f32,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Level {
     pub tiles: Vec<Vec<u8>>,
     pub player_start: PlayerStart,
+    pub goal: Goal,
 }
 
 impl Level {
-    /// Parsea un mapa rectangular donde `.` es suelo, `P` es el inicio y
-    /// los caracteres `1` a `9` representan tipos de pared distintos.
+    /// Parsea un mapa rectangular donde `.` es suelo, `P` es el inicio,
+    /// `G` es la meta y los caracteres `1` a `9` son tipos de pared.
     pub fn parse(source: &str) -> Result<Self, String> {
         let mut tiles = Vec::new();
         let mut player_start = None;
+        let mut goal = None;
         let mut expected_width = None;
 
         for (row_index, line) in source.lines().enumerate() {
@@ -41,6 +49,17 @@ impl Level {
                             x: column_index as f32 + 0.5,
                             y: row_index as f32 + 0.5,
                             angle: DEFAULT_PLAYER_ANGLE,
+                        });
+                        row.push(EMPTY_TILE);
+                    }
+                    b'G' => {
+                        if goal.is_some() {
+                            return Err("El nivel debe tener una única meta".to_owned());
+                        }
+
+                        goal = Some(Goal {
+                            x: column_index as f32 + 0.5,
+                            y: row_index as f32 + 0.5,
                         });
                         row.push(EMPTY_TILE);
                     }
@@ -71,10 +90,12 @@ impl Level {
         }
 
         let player_start = player_start.ok_or("El nivel no tiene posición inicial 'P'")?;
+        let goal = goal.ok_or("El nivel no tiene meta 'G'")?;
 
         Ok(Self {
             tiles,
             player_start,
+            goal,
         })
     }
 }
@@ -85,11 +106,11 @@ mod tests {
 
     #[test]
     fn parsea_paredes_y_posicion_inicial() {
-        let level = Level::parse("111\n1P2\n133").expect("el mapa debe ser válido");
+        let level = Level::parse("1111\n1PG1\n1331").expect("el mapa debe ser válido");
 
         assert_eq!(
             level.tiles,
-            vec![vec![1, 1, 1], vec![1, 0, 2], vec![1, 3, 3]]
+            vec![vec![1, 1, 1, 1], vec![1, 0, 0, 1], vec![1, 3, 3, 1]]
         );
         assert_eq!(
             level.player_start,
@@ -99,5 +120,6 @@ mod tests {
                 angle: DEFAULT_PLAYER_ANGLE,
             }
         );
+        assert_eq!(level.goal, Goal { x: 2.5, y: 1.5 });
     }
 }

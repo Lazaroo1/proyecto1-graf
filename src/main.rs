@@ -1,7 +1,9 @@
-use minifb::{Key, Window, WindowOptions};
+use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use std::time::Instant;
 
+mod bitmap_font;
 mod fps_counter;
+mod game_state;
 mod level;
 mod minimap;
 mod mouse_look;
@@ -39,16 +41,40 @@ fn main() {
     let mut fps_counter = fps_counter::FpsCounter::new();
     let raycaster = raycaster::Raycaster::new(WIDTH, HEIGHT, raycaster::DEFAULT_FOV);
     let minimap = minimap::Minimap::new(&level);
+    let mut game_state = game_state::GameState::Menu;
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let now = Instant::now();
         let delta_time = (now - previous_frame).as_secs_f32().min(MAX_FRAME_TIME);
         previous_frame = now;
 
-        let mouse_delta_x = mouse_look.update(&mut window);
-        update_player(&window, &level, &mut player, delta_time, mouse_delta_x);
-        raycaster.render(&mut buffer, &level, &textures, &player);
-        minimap.draw(&mut buffer, WIDTH, HEIGHT, &player);
+        let start_pressed = window.is_key_pressed(Key::Enter, KeyRepeat::No)
+            || window.is_key_pressed(Key::Space, KeyRepeat::No);
+
+        match game_state {
+            game_state::GameState::Menu => {
+                mouse_look.release(&mut window);
+                game_state::draw_menu(&mut buffer, WIDTH, HEIGHT);
+                if start_pressed {
+                    player = player::Player::from(level.player_start);
+                    game_state.start();
+                }
+            }
+            game_state::GameState::Playing => {
+                let mouse_delta_x = mouse_look.update(&mut window);
+                update_player(&window, &level, &mut player, delta_time, mouse_delta_x);
+                raycaster.render(&mut buffer, &level, &textures, &player);
+                minimap.draw(&mut buffer, WIDTH, HEIGHT, &player);
+                game_state.check_goal(&player, level.goal);
+            }
+            game_state::GameState::Success => {
+                mouse_look.release(&mut window);
+                game_state::draw_success(&mut buffer, WIDTH, HEIGHT);
+                if start_pressed {
+                    game_state.return_to_menu();
+                }
+            }
+        }
         fps_counter.draw(&mut buffer, WIDTH, HEIGHT);
         window
             .update_with_buffer(&buffer, WIDTH, HEIGHT)

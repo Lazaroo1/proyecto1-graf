@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn dibuja_layout_jugador_y_orientacion_superpuestos() {
-        let level = Level::parse("11111\n1P..1\n11111").expect("el nivel debe ser válido");
+        let level = Level::parse("11111\n1P.G1\n11111").expect("el nivel debe ser válido");
         let player = Player::from(level.player_start);
         let minimap = Minimap::new(&level);
         let mut buffer = vec![0; 160 * 100];

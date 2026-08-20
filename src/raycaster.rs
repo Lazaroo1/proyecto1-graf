@@ -299,7 +299,7 @@ mod tests {
     use super::*;
 
     fn open_room() -> Level {
-        Level::parse("1111111\n1.....1\n1P....1\n1.....1\n1111111")
+        Level::parse("1111111\n1....G1\n1P....1\n1.....1\n1111111")
             .expect("el mapa debe ser válido")
     }
 
@@ -336,7 +336,7 @@ mod tests {
 
     #[test]
     fn detecta_una_pared_justo_en_una_esquina() {
-        let level = Level::parse("1111\n1P.1\n1.21\n1111").expect("el mapa debe ser válido");
+        let level = Level::parse("1111\n1PG1\n1.21\n1111").expect("el mapa debe ser válido");
 
         let hit = cast_ray(&level, 1.5, 1.5, 1.0, 1.0)
             .expect("el rayo debe tocar la esquina de la pared");

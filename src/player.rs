@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn empujar_repetidamente_una_pared_respeta_el_radio() {
-        let level = Level::parse("11111\n1P..1\n11111").expect("el mapa debe ser válido");
+        let level = Level::parse("11111\n1P.G1\n11111").expect("el mapa debe ser válido");
         let mut player = Player::from(level.player_start);
 
         for _ in 0..100 {
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn un_movimiento_grande_no_atraviesa_una_pared() {
-        let level = Level::parse("1111111\n1P.1..1\n1111111").expect("el mapa debe ser válido");
+        let level = Level::parse("1111111\n1P.1.G1\n1111111").expect("el mapa debe ser válido");
         let mut player = Player::from(level.player_start);
 
         player.move_by(&level, 20.0, 0.0);
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn el_movimiento_diagonal_no_se_cuela_por_una_esquina() {
-        let level = Level::parse("1111\n1P11\n1111\n1111").expect("el mapa debe ser válido");
+        let level = Level::parse("1111\n1P11\n1111\n111G").expect("el mapa debe ser válido");
         let mut player = Player::from(level.player_start);
 
         for _ in 0..100 {
