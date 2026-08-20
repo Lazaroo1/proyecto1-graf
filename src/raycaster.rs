@@ -1,4 +1,5 @@
-use crate::level::{Level, PlayerStart, EMPTY_TILE};
+use crate::level::{Level, EMPTY_TILE};
+use crate::player::Player;
 
 pub const DEFAULT_FOV: f32 = std::f32::consts::FRAC_PI_3;
 
@@ -26,7 +27,7 @@ pub fn render(
     width: usize,
     height: usize,
     level: &Level,
-    player: PlayerStart,
+    player: &Player,
     fov: f32,
 ) {
     assert_eq!(buffer.len(), width * height);
@@ -288,15 +289,9 @@ mod tests {
         let level = Level::parse(include_str!("../assets/niveles/prueba.txt"))
             .expect("el nivel de prueba debe ser válido");
         let mut buffer = vec![0; 320 * 200];
+        let player = Player::from(level.player_start);
 
-        render(
-            &mut buffer,
-            320,
-            200,
-            &level,
-            level.player_start,
-            DEFAULT_FOV,
-        );
+        render(&mut buffer, 320, 200, &level, &player, DEFAULT_FOV);
 
         for wall_type in 1..=3 {
             let front_color = wall_color(wall_type, HitSide::Vertical);
