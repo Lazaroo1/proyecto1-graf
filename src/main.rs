@@ -3,6 +3,7 @@ use std::time::Instant;
 
 mod fps_counter;
 mod level;
+mod minimap;
 mod mouse_look;
 mod player;
 mod raycaster;
@@ -37,6 +38,7 @@ fn main() {
     let mut mouse_look = mouse_look::MouseLook::new();
     let mut fps_counter = fps_counter::FpsCounter::new();
     let raycaster = raycaster::Raycaster::new(WIDTH, HEIGHT, raycaster::DEFAULT_FOV);
+    let minimap = minimap::Minimap::new(&level);
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let now = Instant::now();
@@ -46,6 +48,7 @@ fn main() {
         let mouse_delta_x = mouse_look.update(&mut window);
         update_player(&window, &level, &mut player, delta_time, mouse_delta_x);
         raycaster.render(&mut buffer, &level, &textures, &player);
+        minimap.draw(&mut buffer, WIDTH, HEIGHT, &player);
         fps_counter.draw(&mut buffer, WIDTH, HEIGHT);
         window
             .update_with_buffer(&buffer, WIDTH, HEIGHT)
