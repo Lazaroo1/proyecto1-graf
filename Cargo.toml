@@ -8,3 +8,6 @@ minifb = "0.27"
 gilrs = "0.11"
 rodio = "0.20"
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser"] }

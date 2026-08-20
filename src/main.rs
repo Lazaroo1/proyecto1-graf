@@ -2,6 +2,7 @@ use minifb::{Key, Window, WindowOptions};
 use std::time::Instant;
 
 mod level;
+mod mouse_look;
 mod player;
 mod raycaster;
 mod texture;
@@ -10,6 +11,7 @@ const WIDTH: usize = 800;
 const HEIGHT: usize = 600;
 const MOVEMENT_SPEED: f32 = 3.0;
 const ROTATION_SPEED: f32 = 2.0;
+const MOUSE_SENSITIVITY: f32 = 0.0025;
 const MAX_FRAME_TIME: f32 = 0.1;
 
 fn main() {
@@ -31,13 +33,15 @@ fn main() {
 
     let mut buffer = vec![0_u32; WIDTH * HEIGHT];
     let mut previous_frame = Instant::now();
+    let mut mouse_look = mouse_look::MouseLook::new();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let now = Instant::now();
         let delta_time = (now - previous_frame).as_secs_f32().min(MAX_FRAME_TIME);
         previous_frame = now;
 
-        update_player(&window, &level, &mut player, delta_time);
+        let mouse_delta_x = mouse_look.update(&mut window);
+        update_player(&window, &level, &mut player, delta_time, mouse_delta_x);
         raycaster::render(
             &mut buffer,
             WIDTH,
@@ -51,6 +55,8 @@ fn main() {
             .update_with_buffer(&buffer, WIDTH, HEIGHT)
             .expect("No se pudo actualizar la ventana");
     }
+
+    mouse_look.release(&mut window);
 }
 
 fn update_player(
@@ -58,10 +64,11 @@ fn update_player(
     level: &level::Level,
     player: &mut player::Player,
     delta_time: f32,
+    mouse_delta_x: f32,
 ) {
     let turn = key_axis(window, Key::Right, Key::Left);
-    player.angle =
-        (player.angle + turn * ROTATION_SPEED * delta_time).rem_euclid(std::f32::consts::TAU);
+    let rotation = turn * ROTATION_SPEED * delta_time + mouse_delta_x * MOUSE_SENSITIVITY;
+    player.angle = (player.angle + rotation).rem_euclid(std::f32::consts::TAU);
 
     let mut forward = key_axis(window, Key::W, Key::S);
     let mut strafe = key_axis(window, Key::D, Key::A);
