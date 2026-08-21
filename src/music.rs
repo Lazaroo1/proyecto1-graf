@@ -1,4 +1,5 @@
 use rand::seq::SliceRandom;
+use rodio::source::{PinkNoise, SineWave};
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use std::fs::File;
 use std::io::BufReader;
@@ -8,6 +9,8 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 const MUSIC_VOLUME: f32 = 0.35;
+const FOOTSTEP_VOLUME: f32 = 0.16;
+const SUCCESS_VOLUME: f32 = 0.14;
 const UPDATE_INTERVAL: Duration = Duration::from_millis(33);
 
 #[derive(Clone, Copy)]
@@ -75,6 +78,8 @@ enum MusicCommand {
     TogglePause,
     Next,
     ToggleMute,
+    PlayFootstep,
+    PlaySuccess,
     Shutdown,
 }
 
@@ -125,6 +130,14 @@ impl MusicPlayer {
         let _ = self.commands.send(MusicCommand::ToggleMute);
     }
 
+    pub fn play_footstep(&self) {
+        let _ = self.commands.send(MusicCommand::PlayFootstep);
+    }
+
+    pub fn play_success(&self) {
+        let _ = self.commands.send(MusicCommand::PlaySuccess);
+    }
+
     pub fn snapshot(&self) -> MusicSnapshot {
         self.state
             .lock()
@@ -156,6 +169,7 @@ fn run_playlist(
     let mut game_active = false;
     let mut user_paused = false;
     let mut muted = false;
+    let mut alternate_footstep = false;
     let mut playback = load_next_track(
         &stream_handle,
         &playlist,
@@ -178,6 +192,7 @@ fn run_playlist(
                     &mut game_active,
                     &mut user_paused,
                     &mut muted,
+                    &mut alternate_footstep,
                 ) {
                     break;
                 }
@@ -213,6 +228,7 @@ fn process_command(
     game_active: &mut bool,
     user_paused: &mut bool,
     muted: &mut bool,
+    alternate_footstep: &mut bool,
 ) -> bool {
     match command {
         MusicCommand::SetGameActive(active) => {
@@ -244,9 +260,50 @@ fn process_command(
                     .set_volume(if *muted { 0.0 } else { MUSIC_VOLUME });
             }
         }
+        MusicCommand::PlayFootstep => {
+            play_footstep_effect(stream_handle, *alternate_footstep);
+            *alternate_footstep = !*alternate_footstep;
+        }
+        MusicCommand::PlaySuccess => play_success_effect(stream_handle),
         MusicCommand::Shutdown => return true,
     }
     false
+}
+
+fn play_footstep_effect(stream_handle: &OutputStreamHandle, alternate: bool) {
+    let Ok(sink) = Sink::try_new(stream_handle) else {
+        return;
+    };
+    let frequency = if alternate { 82.0 } else { 96.0 };
+    let duration = Duration::from_millis(105);
+    let thump = SineWave::new(frequency)
+        .take_duration(duration)
+        .fade_out(Duration::from_millis(90))
+        .amplify(FOOTSTEP_VOLUME);
+    let grit = PinkNoise::new(rodio::cpal::SampleRate(48_000))
+        .take_duration(Duration::from_millis(65))
+        .fade_out(Duration::from_millis(60))
+        .amplify(0.025);
+
+    sink.append(thump.mix(grit));
+    sink.detach();
+}
+
+fn play_success_effect(stream_handle: &OutputStreamHandle) {
+    let Ok(sink) = Sink::try_new(stream_handle) else {
+        return;
+    };
+
+    for (frequency, milliseconds) in [(523.25, 130), (659.25, 130), (783.99, 320)] {
+        sink.append(
+            SineWave::new(frequency)
+                .take_duration(Duration::from_millis(milliseconds))
+                .fade_in(Duration::from_millis(12))
+                .fade_out(Duration::from_millis(80))
+                .amplify(SUCCESS_VOLUME),
+        );
+    }
+    sink.detach();
 }
 
 struct Playback {

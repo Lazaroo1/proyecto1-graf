@@ -19,6 +19,46 @@ const MOVEMENT_SPEED: f32 = 3.0;
 const ROTATION_SPEED: f32 = 2.0;
 const MOUSE_SENSITIVITY: f32 = 0.0025;
 const MAX_FRAME_TIME: f32 = 0.1;
+const FOOTSTEP_DISTANCE: f32 = 0.85;
+
+struct FootstepCadence {
+    distance_since_last: f32,
+    was_moving: bool,
+}
+
+impl FootstepCadence {
+    fn new() -> Self {
+        Self {
+            distance_since_last: 0.0,
+            was_moving: false,
+        }
+    }
+
+    fn update(&mut self, distance: f32) -> bool {
+        if distance <= f32::EPSILON {
+            self.reset();
+            return false;
+        }
+        if !self.was_moving {
+            self.was_moving = true;
+            self.distance_since_last = 0.0;
+            return true;
+        }
+
+        self.distance_since_last += distance;
+        if self.distance_since_last >= FOOTSTEP_DISTANCE {
+            self.distance_since_last %= FOOTSTEP_DISTANCE;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn reset(&mut self) {
+        self.distance_since_last = 0.0;
+        self.was_moving = false;
+    }
+}
 
 fn main() {
     let level = level::Level::parse(include_str!("../assets/niveles/prueba.txt"))
@@ -47,6 +87,7 @@ fn main() {
     let mut music = music::MusicPlayer::new();
     let mut music_ui = music_ui::MusicUi::new();
     let mut music_controls_active = false;
+    let mut footstep_cadence = FootstepCadence::new();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let now = Instant::now();
@@ -60,6 +101,7 @@ fn main() {
         match game_state {
             game_state::GameState::Menu => {
                 music_controls_active = false;
+                footstep_cadence.reset();
                 mouse_look.release(&mut window);
                 game_state::draw_menu(&mut buffer, WIDTH, HEIGHT);
                 if start_pressed {
@@ -87,7 +129,8 @@ fn main() {
                     music.toggle_mute();
                 }
                 music_ui.handle_mouse(&window, &music, music_controls_active, WIDTH, HEIGHT);
-                update_player(&window, &level, &mut player, delta_time, mouse_delta_x);
+                let moved_distance =
+                    update_player(&window, &level, &mut player, delta_time, mouse_delta_x);
                 raycaster.render(&mut buffer, &level, &textures, &player);
                 minimap.draw(&mut buffer, WIDTH, HEIGHT, &player);
                 music_ui.draw(
@@ -98,9 +141,16 @@ fn main() {
                     music_controls_active,
                 );
                 game_state.check_goal(&player, level.goal);
+                if game_state == game_state::GameState::Success {
+                    footstep_cadence.reset();
+                    music.play_success();
+                } else if footstep_cadence.update(moved_distance) {
+                    music.play_footstep();
+                }
             }
             game_state::GameState::Success => {
                 music_controls_active = false;
+                footstep_cadence.reset();
                 mouse_look.release(&mut window);
                 game_state::draw_success(&mut buffer, WIDTH, HEIGHT);
                 if start_pressed {
@@ -125,7 +175,7 @@ fn update_player(
     player: &mut player::Player,
     delta_time: f32,
     mouse_delta_x: f32,
-) {
+) -> f32 {
     let turn = key_axis(window, Key::Right, Key::Left);
     let rotation = turn * ROTATION_SPEED * delta_time + mouse_delta_x * MOUSE_SENSITIVITY;
     player.angle = (player.angle + rotation).rem_euclid(std::f32::consts::TAU);
@@ -145,9 +195,29 @@ fn update_player(
     let delta_x = (direction_x * forward - direction_y * strafe) * distance;
     let delta_y = (direction_y * forward + direction_x * strafe) * distance;
 
+    let previous_x = player.x;
+    let previous_y = player.y;
     player.move_by(level, delta_x, delta_y);
+    (player.x - previous_x).hypot(player.y - previous_y)
 }
 
 fn key_axis(window: &Window, positive: Key, negative: Key) -> f32 {
     i32::from(window.is_key_down(positive)) as f32 - i32::from(window.is_key_down(negative)) as f32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn los_pasos_dependen_de_distancia_real_y_se_reinician_al_detenerse() {
+        let mut cadence = FootstepCadence::new();
+        assert!(!cadence.update(0.0));
+        assert!(cadence.update(0.1));
+        assert!(!cadence.update(0.4));
+        assert!(!cadence.update(0.4));
+        assert!(cadence.update(0.1));
+        assert!(!cadence.update(0.0));
+        assert!(cadence.update(0.1));
+    }
 }

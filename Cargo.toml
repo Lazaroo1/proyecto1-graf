@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 minifb = "0.27"
 gilrs = "0.11"
-rodio = "0.20"
+rodio = { version = "0.20", features = ["noise"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 rand = "0.8"
 
