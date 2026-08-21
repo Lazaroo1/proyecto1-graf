@@ -8,6 +8,8 @@ const BACKGROUND_COLOR: u32 = 0x0C0F14;
 const GRID_COLOR: u32 = 0x171B22;
 const FLOOR_COLOR: u32 = 0x2B3038;
 const PLAYER_COLOR: u32 = 0xFFE66D;
+const GOAL_COLOR: u32 = 0x35F06F;
+const GOAL_FLAG_COLOR: u32 = 0xF7FAFC;
 
 /// Overlay compacto con la geometría estática del nivel precalculada.
 pub struct Minimap {
@@ -46,6 +48,10 @@ impl Minimap {
                 }
             }
         }
+
+        let goal_x = level.goal.x.floor() as usize;
+        let goal_y = level.goal.y.floor() as usize;
+        draw_goal_marker(&mut static_pixels, width, goal_x, goal_y);
 
         Self {
             width,
@@ -106,6 +112,27 @@ impl Minimap {
                 );
             }
         }
+    }
+}
+
+fn draw_goal_marker(pixels: &mut [u32], width: usize, map_x: usize, map_y: usize) {
+    let origin_x = PADDING + map_x * CELL_SIZE;
+    let origin_y = PADDING + map_y * CELL_SIZE;
+
+    for y in 1..CELL_SIZE {
+        for x in 1..CELL_SIZE {
+            pixels[(origin_y + y) * width + origin_x + x] = GOAL_COLOR;
+        }
+    }
+
+    // Bandera blanca sobre la celda verde: asta vertical y paño hacia la derecha.
+    for y in 1..CELL_SIZE {
+        pixels[(origin_y + y) * width + origin_x + 1] = GOAL_FLAG_COLOR;
+    }
+    if CELL_SIZE >= 5 {
+        pixels[(origin_y + 1) * width + origin_x + 2] = GOAL_FLAG_COLOR;
+        pixels[(origin_y + 1) * width + origin_x + 3] = GOAL_FLAG_COLOR;
+        pixels[(origin_y + 2) * width + origin_x + 2] = GOAL_FLAG_COLOR;
     }
 }
 
@@ -180,6 +207,8 @@ mod tests {
 
         assert!(buffer.contains(&wall_color(1)));
         assert!(buffer.contains(&FLOOR_COLOR));
+        assert!(buffer.contains(&GOAL_COLOR));
+        assert!(buffer.contains(&GOAL_FLAG_COLOR));
         assert!(
             buffer
                 .iter()

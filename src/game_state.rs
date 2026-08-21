@@ -68,6 +68,15 @@ pub fn draw_menu(buffer: &mut [u32], width: usize, height: usize) {
         2,
         ACCENT_COLOR,
     );
+    bitmap_font::draw_centered(
+        buffer,
+        width,
+        height,
+        height * 2 / 3 + 42,
+        b"BUSCA LA META VERDE EN EL MINIMAPA",
+        2,
+        ACCENT_COLOR,
+    );
 }
 
 pub fn draw_success(buffer: &mut [u32], width: usize, height: usize) {
