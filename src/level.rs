@@ -103,6 +103,7 @@ impl Level {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::VecDeque;
 
     #[test]
     fn parsea_paredes_y_posicion_inicial() {
@@ -121,5 +122,45 @@ mod tests {
             }
         );
         assert_eq!(level.goal, Goal { x: 2.5, y: 1.5 });
+    }
+
+    #[test]
+    fn el_nivel_ampliado_tiene_meta_alcanzable_y_tres_paredes() {
+        let level = Level::parse(include_str!("../assets/niveles/prueba.txt"))
+            .expect("el nivel ampliado debe ser válido");
+        assert_eq!(level.tiles.len(), 15);
+        assert!(level.tiles.iter().all(|row| row.len() == 35));
+        for wall_type in 1..=3 {
+            assert!(level.tiles.iter().flatten().any(|tile| *tile == wall_type));
+        }
+
+        let start = (
+            level.player_start.x.floor() as usize,
+            level.player_start.y.floor() as usize,
+        );
+        let goal = (level.goal.x.floor() as usize, level.goal.y.floor() as usize);
+        let mut pending = VecDeque::from([start]);
+        let mut visited = vec![vec![false; level.tiles[0].len()]; level.tiles.len()];
+        visited[start.1][start.0] = true;
+
+        while let Some((x, y)) = pending.pop_front() {
+            for (next_x, next_y) in [
+                (x.wrapping_sub(1), y),
+                (x + 1, y),
+                (x, y.wrapping_sub(1)),
+                (x, y + 1),
+            ] {
+                if next_y < level.tiles.len()
+                    && next_x < level.tiles[0].len()
+                    && !visited[next_y][next_x]
+                    && level.tiles[next_y][next_x] == EMPTY_TILE
+                {
+                    visited[next_y][next_x] = true;
+                    pending.push_back((next_x, next_y));
+                }
+            }
+        }
+
+        assert!(visited[goal.1][goal.0]);
     }
 }
