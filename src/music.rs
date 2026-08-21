@@ -101,12 +101,15 @@ impl MusicPlayer {
         let worker = thread::Builder::new()
             .name("music-playlist".to_owned())
             .spawn(move || run_playlist(playlist, receiver, worker_state))
-            .expect("No se pudo iniciar el hilo de música");
+            .ok();
+        if worker.is_none() {
+            set_unavailable(&state);
+        }
 
         Self {
             commands,
             state,
-            worker: Some(worker),
+            worker,
             game_active: false,
         }
     }

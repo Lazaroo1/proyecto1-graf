@@ -154,7 +154,8 @@ mod tests {
 
     #[test]
     fn el_movimiento_diagonal_no_se_cuela_por_una_esquina() {
-        let level = Level::parse("1111\n1P11\n1111\n111G").expect("el mapa debe ser válido");
+        let level =
+            Level::parse("11111\n1P111\n11111\n111G1\n11111").expect("el mapa debe ser válido");
         let mut player = Player::from(level.player_start);
 
         for _ in 0..100 {

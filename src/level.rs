@@ -1,4 +1,5 @@
 pub const EMPTY_TILE: u8 = 0;
+pub const WALL_TYPE_COUNT: u8 = 3;
 pub const DEFAULT_PLAYER_ANGLE: f32 = -std::f32::consts::FRAC_PI_2;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -23,7 +24,7 @@ pub struct Level {
 
 impl Level {
     /// Parsea un mapa rectangular donde `.` es suelo, `P` es el inicio,
-    /// `G` es la meta y los caracteres `1` a `9` son tipos de pared.
+    /// `G` es la meta y los caracteres `1` a `3` son tipos de pared.
     pub fn parse(source: &str) -> Result<Self, String> {
         let mut tiles = Vec::new();
         let mut player_start = None;
@@ -39,7 +40,7 @@ impl Level {
             for (column_index, tile) in line.bytes().enumerate() {
                 match tile {
                     b'.' => row.push(EMPTY_TILE),
-                    b'1'..=b'9' => row.push(tile - b'0'),
+                    b'1'..=b'3' => row.push(tile - b'0'),
                     b'P' => {
                         if player_start.is_some() {
                             return Err("El nivel debe tener una única posición inicial".to_owned());
@@ -89,6 +90,10 @@ impl Level {
             return Err("El nivel no puede estar vacío".to_owned());
         }
 
+        if !has_closed_boundary(&tiles) {
+            return Err("El nivel debe estar cerrado por paredes en todo su borde".to_owned());
+        }
+
         let player_start = player_start.ok_or("El nivel no tiene posición inicial 'P'")?;
         let goal = goal.ok_or("El nivel no tiene meta 'G'")?;
 
@@ -98,6 +103,23 @@ impl Level {
             goal,
         })
     }
+}
+
+fn has_closed_boundary(tiles: &[Vec<u8>]) -> bool {
+    let Some(first_row) = tiles.first() else {
+        return false;
+    };
+    let Some(last_row) = tiles.last() else {
+        return false;
+    };
+    if first_row.contains(&EMPTY_TILE) || last_row.contains(&EMPTY_TILE) {
+        return false;
+    }
+
+    tiles.iter().all(|row| {
+        row.first().is_some_and(|tile| *tile != EMPTY_TILE)
+            && row.last().is_some_and(|tile| *tile != EMPTY_TILE)
+    })
 }
 
 #[cfg(test)]
@@ -162,5 +184,11 @@ mod tests {
         }
 
         assert!(visited[goal.1][goal.0]);
+    }
+
+    #[test]
+    fn rechaza_niveles_abiertos_o_con_paredes_sin_textura() {
+        assert!(Level::parse("1111\n1PG.\n1111").is_err());
+        assert!(Level::parse("1111\n1P41\n1G11\n1111").is_err());
     }
 }

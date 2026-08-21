@@ -4,8 +4,10 @@ use crate::texture::WallTextures;
 
 pub const DEFAULT_FOV: f32 = std::f32::consts::FRAC_PI_3;
 
-const CEILING_COLOR: u32 = 0x202632;
-const FLOOR_COLOR: u32 = 0x38332D;
+const CEILING_TOP_COLOR: u32 = 0x101620;
+const CEILING_HORIZON_COLOR: u32 = 0x2A3446;
+const FLOOR_HORIZON_COLOR: u32 = 0x40382C;
+const FLOOR_BOTTOM_COLOR: u32 = 0x191714;
 const MIN_DISTANCE: f32 = 0.0001;
 const DDA_EPSILON: f32 = 0.000001;
 
@@ -72,8 +74,7 @@ impl Raycaster {
     ) {
         assert_eq!(buffer.len(), self.width * self.height);
 
-        buffer[..self.horizon * self.width].fill(CEILING_COLOR);
-        buffer[self.horizon * self.width..].fill(FLOOR_COLOR);
+        self.draw_background(buffer);
 
         let direction_x = player.angle.cos();
         let direction_y = player.angle.sin();
@@ -96,7 +97,7 @@ impl Raycaster {
             let texture_column = textures.column(
                 hit.wall_type,
                 hit.texture_u,
-                hit.side == HitSide::Horizontal,
+                wall_brightness(hit.distance, hit.side),
             );
             let texture_step = wall_height.recip();
             let mut texture_v = (draw_start as f32 + 0.5 - wall_top) * texture_step;
@@ -107,6 +108,54 @@ impl Raycaster {
             }
         }
     }
+
+    fn draw_background(&self, buffer: &mut [u32]) {
+        for row in 0..self.horizon {
+            let amount = normalized_row(row, self.horizon);
+            let color = lerp_color(CEILING_TOP_COLOR, CEILING_HORIZON_COLOR, amount);
+            buffer[row * self.width..(row + 1) * self.width].fill(color);
+        }
+
+        let floor_height = self.height - self.horizon;
+        for floor_row in 0..floor_height {
+            let amount = normalized_row(floor_row, floor_height);
+            let color = lerp_color(FLOOR_HORIZON_COLOR, FLOOR_BOTTOM_COLOR, amount);
+            let row = self.horizon + floor_row;
+            buffer[row * self.width..(row + 1) * self.width].fill(color);
+        }
+    }
+}
+
+fn normalized_row(row: usize, row_count: usize) -> f32 {
+    if row_count <= 1 {
+        0.0
+    } else {
+        row as f32 / (row_count - 1) as f32
+    }
+}
+
+fn lerp_color(from: u32, to: u32, amount: f32) -> u32 {
+    let amount = amount.clamp(0.0, 1.0);
+    let channel = |shift: u32| {
+        let start = ((from >> shift) & 0xFF_u32) as f32;
+        let end = ((to >> shift) & 0xFF_u32) as f32;
+        (start + (end - start) * amount).round() as u32
+    };
+    (channel(16) << 16) | (channel(8) << 8) | channel(0)
+}
+
+fn wall_brightness(distance: f32, side: HitSide) -> f32 {
+    let distance_light = if distance.is_finite() {
+        (1.2 / (1.0 + distance.max(0.0) * 0.075)).clamp(0.3, 1.0)
+    } else {
+        0.3
+    };
+    let orientation_light = if side == HitSide::Horizontal {
+        0.78
+    } else {
+        1.0
+    };
+    (distance_light * orientation_light).max(0.3)
 }
 
 pub fn cast_ray(
@@ -136,7 +185,12 @@ pub fn cast_ray(
     let (step_y, mut side_distance_y) =
         initial_step_and_distance(origin_y, map_y, direction_y, delta_distance_y);
 
-    let max_steps = level.tiles.len() * level.tiles.first()?.len() * 2 + 1;
+    let max_steps = level
+        .tiles
+        .len()
+        .saturating_mul(level.tiles.first()?.len())
+        .saturating_mul(2)
+        .saturating_add(1);
 
     for _ in 0..max_steps {
         let tolerance = DDA_EPSILON * side_distance_x.abs().max(side_distance_y.abs()).max(1.0);
@@ -361,5 +415,16 @@ mod tests {
             .copied()
             .collect::<std::collections::HashSet<_>>();
         assert!(unique_colors.len() > 32);
+    }
+
+    #[test]
+    fn atenúa_paredes_por_distancia_y_orientacion() {
+        let cerca = wall_brightness(1.0, HitSide::Vertical);
+        let lejos = wall_brightness(20.0, HitSide::Vertical);
+        let lateral = wall_brightness(1.0, HitSide::Horizontal);
+
+        assert!(cerca > lejos);
+        assert!(cerca > lateral);
+        assert!((0.3..=1.0).contains(&lejos));
     }
 }

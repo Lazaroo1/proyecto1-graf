@@ -62,19 +62,34 @@ impl FootstepCadence {
 }
 
 fn main() {
-    let level = level::Level::parse(include_str!("../assets/niveles/prueba.txt"))
-        .expect("No se pudo cargar el nivel de prueba");
+    let level = match level::Level::parse(include_str!("../assets/niveles/prueba.txt")) {
+        Ok(level) => level,
+        Err(error) => {
+            eprintln!("No se pudo cargar el nivel de prueba: {error}");
+            return;
+        }
+    };
     let mut player = player::Player::from(level.player_start);
-    let textures = texture::WallTextures::load_embedded()
-        .expect("No se pudieron cargar las texturas de paredes");
+    let textures = match texture::WallTextures::load_embedded() {
+        Ok(textures) => textures,
+        Err(error) => {
+            eprintln!("No se pudieron cargar las texturas de paredes: {error}");
+            return;
+        }
+    };
 
-    let mut window = Window::new(
+    let mut window = match Window::new(
         "Proyecto 1 - Ray Caster",
         WIDTH,
         HEIGHT,
         WindowOptions::default(),
-    )
-    .expect("No se pudo crear la ventana");
+    ) {
+        Ok(window) => window,
+        Err(error) => {
+            eprintln!("No se pudo crear la ventana: {error}");
+            return;
+        }
+    };
 
     window.set_target_fps(60);
 
@@ -170,9 +185,10 @@ fn main() {
         }
         music.sync_game_state(game_state == game_state::GameState::Playing);
         fps_counter.draw(&mut buffer, WIDTH, HEIGHT);
-        window
-            .update_with_buffer(&buffer, WIDTH, HEIGHT)
-            .expect("No se pudo actualizar la ventana");
+        if let Err(error) = window.update_with_buffer(&buffer, WIDTH, HEIGHT) {
+            eprintln!("La ventana dejó de estar disponible: {error}");
+            break;
+        }
         fps_counter.frame_rendered();
     }
 
