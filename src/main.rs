@@ -4,6 +4,7 @@ use std::time::Instant;
 mod bitmap_font;
 mod fps_counter;
 mod game_state;
+mod gamepad_input;
 mod level;
 mod minimap;
 mod mouse_look;
@@ -88,14 +89,17 @@ fn main() {
     let mut music_ui = music_ui::MusicUi::new();
     let mut music_controls_active = false;
     let mut footstep_cadence = FootstepCadence::new();
+    let mut gamepad = gamepad_input::GamepadInput::new();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let now = Instant::now();
         let delta_time = (now - previous_frame).as_secs_f32().min(MAX_FRAME_TIME);
         previous_frame = now;
 
+        let gamepad_frame = gamepad.poll(window.is_active());
         let start_pressed = window.is_key_pressed(Key::Enter, KeyRepeat::No)
-            || window.is_key_pressed(Key::Space, KeyRepeat::No);
+            || window.is_key_pressed(Key::Space, KeyRepeat::No)
+            || gamepad_frame.start_pressed;
         let toggle_music_controls = window.is_key_pressed(Key::Tab, KeyRepeat::No);
 
         match game_state {
@@ -129,8 +133,14 @@ fn main() {
                     music.toggle_mute();
                 }
                 music_ui.handle_mouse(&window, &music, music_controls_active, WIDTH, HEIGHT);
-                let moved_distance =
-                    update_player(&window, &level, &mut player, delta_time, mouse_delta_x);
+                let moved_distance = update_player(
+                    &window,
+                    &level,
+                    &mut player,
+                    delta_time,
+                    mouse_delta_x,
+                    gamepad_frame,
+                );
                 raycaster.render(&mut buffer, &level, &textures, &player);
                 minimap.draw(&mut buffer, WIDTH, HEIGHT, &player);
                 music_ui.draw(
@@ -175,13 +185,14 @@ fn update_player(
     player: &mut player::Player,
     delta_time: f32,
     mouse_delta_x: f32,
+    gamepad: gamepad_input::GamepadFrame,
 ) -> f32 {
-    let turn = key_axis(window, Key::Right, Key::Left);
+    let turn = (key_axis(window, Key::Right, Key::Left) + gamepad.turn).clamp(-1.0, 1.0);
     let rotation = turn * ROTATION_SPEED * delta_time + mouse_delta_x * MOUSE_SENSITIVITY;
     player.angle = (player.angle + rotation).rem_euclid(std::f32::consts::TAU);
 
-    let mut forward = key_axis(window, Key::W, Key::S);
-    let mut strafe = key_axis(window, Key::D, Key::A);
+    let mut forward = key_axis(window, Key::W, Key::S) + gamepad.forward;
+    let mut strafe = key_axis(window, Key::D, Key::A) + gamepad.strafe;
     let input_length = forward.hypot(strafe);
 
     if input_length > 1.0 {

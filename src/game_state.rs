@@ -55,7 +55,7 @@ pub fn draw_menu(buffer: &mut [u32], width: usize, height: usize) {
         width,
         height,
         height / 2,
-        b"ENTER O ESPACIO PARA JUGAR",
+        b"ENTER ESPACIO O BOTON X",
         2,
         TEXT_COLOR,
     );
@@ -64,7 +64,7 @@ pub fn draw_menu(buffer: &mut [u32], width: usize, height: usize) {
         width,
         height,
         height * 2 / 3,
-        b"WASD Y MOUSE PARA MOVERTE",
+        b"WASD MOUSE O CONTROL PARA MOVERTE",
         2,
         ACCENT_COLOR,
     );
@@ -96,7 +96,7 @@ pub fn draw_success(buffer: &mut [u32], width: usize, height: usize) {
         width,
         height,
         height * 2 / 3,
-        b"ENTER PARA VOLVER AL MENU",
+        b"ENTER O X PARA VOLVER AL MENU",
         2,
         ACCENT_COLOR,
     );
