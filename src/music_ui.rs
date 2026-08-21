@@ -3,18 +3,23 @@ use crate::music::{MusicPlayer, MusicSnapshot};
 use minifb::{MouseButton, MouseMode, Window};
 use std::time::Duration;
 
-const PANEL_WIDTH: usize = 252;
-const PANEL_HEIGHT: usize = 126;
+const PANEL_WIDTH: usize = 228;
+const PANEL_HEIGHT: usize = 174;
 const MARGIN: usize = 10;
-const PANEL_COLOR: u32 = 0x24272D;
+const SHADOW_COLOR: u32 = 0x090A0D;
+const PANEL_COLOR: u32 = 0x303238;
+const PANEL_INNER_COLOR: u32 = 0x292B30;
 const BORDER_COLOR: u32 = 0xB94E48;
-const INNER_BORDER_COLOR: u32 = 0x552A2A;
-const TEXT_COLOR: u32 = 0xF0D59A;
+const BORDER_HIGHLIGHT_COLOR: u32 = 0xE06A60;
+const INNER_BORDER_COLOR: u32 = 0x562826;
+const TEXT_COLOR: u32 = 0xF3C982;
 const SECONDARY_TEXT_COLOR: u32 = 0xE8E9ED;
-const TRACK_COLOR: u32 = 0x111319;
+const TRACK_COLOR: u32 = 0x131419;
 const PROGRESS_COLOR: u32 = 0xC44F49;
-const BUTTON_COLOR: u32 = 0x743633;
-const BUTTON_HOVER_COLOR: u32 = 0x9B4641;
+const PROGRESS_HIGHLIGHT_COLOR: u32 = 0xE26A60;
+const BUTTON_COLOR: u32 = 0x703330;
+const BUTTON_INNER_COLOR: u32 = 0x8D403B;
+const BUTTON_HOVER_COLOR: u32 = 0xA94C46;
 const MUTED_COLOR: u32 = 0xD66A61;
 
 #[derive(Clone, Copy)]
@@ -90,6 +95,18 @@ impl MusicUi {
         }
 
         let panel = panel_rect(width, height);
+        fill_rect(
+            buffer,
+            width,
+            height,
+            Rect {
+                x: panel.x + 5,
+                y: panel.y + 5,
+                width: panel.width,
+                height: panel.height,
+            },
+            SHADOW_COLOR,
+        );
         fill_rect(buffer, width, height, panel, PANEL_COLOR);
         stroke_rect(buffer, width, height, panel, BORDER_COLOR);
         stroke_rect(
@@ -104,15 +121,32 @@ impl MusicUi {
             },
             INNER_BORDER_COLOR,
         );
-
-        bitmap_font::draw_text(
+        fill_rect(
             buffer,
             width,
             height,
-            panel.x + 12,
-            panel.y + 12,
+            Rect {
+                x: panel.x + 7,
+                y: panel.y + 7,
+                width: panel.width - 14,
+                height: panel.height - 14,
+            },
+            PANEL_INNER_COLOR,
+        );
+        draw_corner_details(buffer, width, height, panel);
+
+        draw_panel_centered_text(
+            buffer,
+            width,
+            height,
+            panel,
+            panel.y + 18,
             snapshot.track_name.as_bytes(),
-            2,
+            if snapshot.track_name.len() <= 17 {
+                2
+            } else {
+                1
+            },
             if snapshot.available {
                 TEXT_COLOR
             } else {
@@ -121,38 +155,63 @@ impl MusicUi {
         );
 
         let progress_track = Rect {
-            x: panel.x + 12,
-            y: panel.y + 37,
-            width: panel.width - 24,
-            height: 10,
+            x: panel.x + 17,
+            y: panel.y + 51,
+            width: panel.width - 34,
+            height: 20,
         };
         fill_rect(buffer, width, height, progress_track, TRACK_COLOR);
-        stroke_rect(buffer, width, height, progress_track, INNER_BORDER_COLOR);
-        let ratio = progress_ratio(snapshot.elapsed, snapshot.duration);
-        let progress_width = ((progress_track.width - 2) as f32 * ratio).round() as usize;
-        fill_rect(
+        stroke_rect(buffer, width, height, progress_track, SHADOW_COLOR);
+        stroke_rect(
             buffer,
             width,
             height,
             Rect {
                 x: progress_track.x + 1,
                 y: progress_track.y + 1,
-                width: progress_width,
+                width: progress_track.width - 2,
                 height: progress_track.height - 2,
             },
-            PROGRESS_COLOR,
+            INNER_BORDER_COLOR,
         );
-
-        let time = format_times(snapshot.elapsed, snapshot.duration);
-        let time_width = time.len() * (bitmap_font::GLYPH_WIDTH + 1) - 1;
-        bitmap_font::draw_text(
+        let ratio = progress_ratio(snapshot.elapsed, snapshot.duration);
+        let progress_width = ((progress_track.width - 6) as f32 * ratio).round() as usize;
+        fill_rect(
             buffer,
             width,
             height,
-            panel.x + (panel.width - time_width) / 2,
-            panel.y + 54,
+            Rect {
+                x: progress_track.x + 3,
+                y: progress_track.y + 3,
+                width: progress_width,
+                height: progress_track.height - 6,
+            },
+            PROGRESS_COLOR,
+        );
+        if progress_width > 0 {
+            fill_rect(
+                buffer,
+                width,
+                height,
+                Rect {
+                    x: progress_track.x + 3,
+                    y: progress_track.y + 3,
+                    width: progress_width,
+                    height: 2,
+                },
+                PROGRESS_HIGHLIGHT_COLOR,
+            );
+        }
+
+        let time = format_times(snapshot.elapsed, snapshot.duration);
+        draw_panel_centered_text(
+            buffer,
+            width,
+            height,
+            panel,
+            panel.y + 82,
             &time,
-            1,
+            2,
             SECONDARY_TEXT_COLOR,
         );
 
@@ -187,8 +246,8 @@ impl MusicUi {
             buffer,
             width,
             height,
-            panel.x + 88,
-            panel.y + 112,
+            panel.x + 82,
+            panel.y + 158,
             if controls_enabled {
                 b"TAB VOLVER"
             } else {
@@ -211,27 +270,93 @@ fn panel_rect(width: usize, height: usize) -> Rect {
 
 fn button_rects(width: usize, height: usize) -> (Rect, Rect, Rect) {
     let panel = panel_rect(width, height);
-    let y = panel.y + 74;
+    let y = panel.y + 112;
     (
         Rect {
-            x: panel.x + 52,
+            x: panel.x + 34,
             y,
-            width: 34,
-            height: 30,
+            width: 40,
+            height: 38,
         },
         Rect {
-            x: panel.x + 109,
+            x: panel.x + 94,
             y,
-            width: 34,
-            height: 30,
+            width: 40,
+            height: 38,
         },
         Rect {
-            x: panel.x + 166,
+            x: panel.x + 154,
             y,
-            width: 34,
-            height: 30,
+            width: 40,
+            height: 38,
         },
     )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_panel_centered_text(
+    buffer: &mut [u32],
+    width: usize,
+    height: usize,
+    panel: Rect,
+    y: usize,
+    text: &[u8],
+    scale: usize,
+    color: u32,
+) {
+    let text_width = text
+        .len()
+        .saturating_mul((bitmap_font::GLYPH_WIDTH + 1) * scale)
+        .saturating_sub(scale);
+    let x = panel.x + panel.width.saturating_sub(text_width) / 2;
+    bitmap_font::draw_text(buffer, width, height, x, y, text, scale, color);
+}
+
+fn draw_corner_details(buffer: &mut [u32], width: usize, height: usize, panel: Rect) {
+    let corners = [
+        (panel.x + 5, panel.y + 5, 1_i32, 1_i32),
+        (panel.x + panel.width - 6, panel.y + 5, -1, 1),
+        (panel.x + 5, panel.y + panel.height - 6, 1, -1),
+        (
+            panel.x + panel.width - 6,
+            panel.y + panel.height - 6,
+            -1,
+            -1,
+        ),
+    ];
+
+    for (x, y, direction_x, direction_y) in corners {
+        for offset in 0..7_i32 {
+            put_pixel_signed(
+                buffer,
+                width,
+                height,
+                x as i32 + offset * direction_x,
+                y as i32,
+                BORDER_HIGHLIGHT_COLOR,
+            );
+            put_pixel_signed(
+                buffer,
+                width,
+                height,
+                x as i32,
+                y as i32 + offset * direction_y,
+                BORDER_HIGHLIGHT_COLOR,
+            );
+        }
+        fill_rect(
+            buffer,
+            width,
+            height,
+            Rect {
+                x: x.saturating_sub(1),
+                y: y.saturating_sub(1),
+                width: 3,
+                height: 3,
+            },
+            TEXT_COLOR,
+        );
+    }
 }
 
 fn progress_ratio(elapsed: Duration, total: Duration) -> f32 {
@@ -272,6 +397,18 @@ fn draw_button(buffer: &mut [u32], width: usize, height: usize, rect: Rect, hove
         buffer,
         width,
         height,
+        Rect {
+            x: rect.x + 3,
+            y: rect.y + 3,
+            width: rect.width,
+            height: rect.height,
+        },
+        SHADOW_COLOR,
+    );
+    fill_rect(
+        buffer,
+        width,
+        height,
         rect,
         if hovered {
             BUTTON_HOVER_COLOR
@@ -280,32 +417,33 @@ fn draw_button(buffer: &mut [u32], width: usize, height: usize, rect: Rect, hove
         },
     );
     stroke_rect(buffer, width, height, rect, BORDER_COLOR);
+    stroke_rect(
+        buffer,
+        width,
+        height,
+        Rect {
+            x: rect.x + 3,
+            y: rect.y + 3,
+            width: rect.width - 6,
+            height: rect.height - 6,
+        },
+        BUTTON_INNER_COLOR,
+    );
 }
 
 fn draw_play_pause_icon(buffer: &mut [u32], width: usize, height: usize, rect: Rect, paused: bool) {
     if paused {
-        for row in 0..14 {
-            for column in 0..=(row.min(13 - row) / 2) {
-                put_pixel(
-                    buffer,
-                    width,
-                    height,
-                    rect.x + 12 + column,
-                    rect.y + 8 + row,
-                    TEXT_COLOR,
-                );
-            }
-        }
+        draw_right_triangle(buffer, width, height, rect.x + 12, rect.y + 10, 11, 18);
     } else {
         fill_rect(
             buffer,
             width,
             height,
             Rect {
-                x: rect.x + 10,
-                y: rect.y + 8,
-                width: 4,
-                height: 14,
+                x: rect.x + 11,
+                y: rect.y + 10,
+                width: 5,
+                height: 18,
             },
             TEXT_COLOR,
         );
@@ -314,10 +452,10 @@ fn draw_play_pause_icon(buffer: &mut [u32], width: usize, height: usize, rect: R
             width,
             height,
             Rect {
-                x: rect.x + 20,
-                y: rect.y + 8,
-                width: 4,
-                height: 14,
+                x: rect.x + 24,
+                y: rect.y + 10,
+                width: 5,
+                height: 18,
             },
             TEXT_COLOR,
         );
@@ -325,28 +463,16 @@ fn draw_play_pause_icon(buffer: &mut [u32], width: usize, height: usize, rect: R
 }
 
 fn draw_next_icon(buffer: &mut [u32], width: usize, height: usize, rect: Rect) {
-    for row in 0..14 {
-        let span = row.min(13 - row) / 2;
-        for column in 0..=span {
-            put_pixel(
-                buffer,
-                width,
-                height,
-                rect.x + 10 + column,
-                rect.y + 8 + row,
-                TEXT_COLOR,
-            );
-        }
-    }
+    draw_right_triangle(buffer, width, height, rect.x + 9, rect.y + 10, 11, 18);
     fill_rect(
         buffer,
         width,
         height,
         Rect {
-            x: rect.x + 21,
-            y: rect.y + 8,
-            width: 3,
-            height: 14,
+            x: rect.x + 27,
+            y: rect.y + 10,
+            width: 4,
+            height: 18,
         },
         TEXT_COLOR,
     );
@@ -359,51 +485,74 @@ fn draw_mute_icon(buffer: &mut [u32], width: usize, height: usize, rect: Rect, m
         height,
         Rect {
             x: rect.x + 8,
-            y: rect.y + 12,
-            width: 5,
-            height: 7,
+            y: rect.y + 15,
+            width: 7,
+            height: 9,
         },
         TEXT_COLOR,
     );
-    for offset in 0..6 {
+    for offset in 0..8 {
         put_pixel(
             buffer,
             width,
             height,
-            rect.x + 13 + offset / 2,
-            rect.y + 11 - offset / 2,
+            rect.x + 15 + offset / 2,
+            rect.y + 14 - offset / 2,
             TEXT_COLOR,
         );
         put_pixel(
             buffer,
             width,
             height,
-            rect.x + 13 + offset / 2,
-            rect.y + 19 + offset / 2,
+            rect.x + 15 + offset / 2,
+            rect.y + 24 + offset / 2,
             TEXT_COLOR,
         );
     }
     if muted {
-        for offset in 0..15 {
+        for offset in 0..21 {
             put_pixel(
                 buffer,
                 width,
                 height,
-                rect.x + 9 + offset,
-                rect.y + 7 + offset,
+                rect.x + 8 + offset,
+                rect.y + 8 + offset,
                 MUTED_COLOR,
             );
         }
     } else {
-        for offset in 0..8 {
+        for offset in 0..12 {
             put_pixel(
                 buffer,
                 width,
                 height,
-                rect.x + 20 + offset / 3,
-                rect.y + 11 + offset,
+                rect.x + 24 + offset / 4,
+                rect.y + 13 + offset,
                 TEXT_COLOR,
             );
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_right_triangle(
+    buffer: &mut [u32],
+    width: usize,
+    height: usize,
+    origin_x: usize,
+    origin_y: usize,
+    triangle_width: usize,
+    triangle_height: usize,
+) {
+    if triangle_width < 2 || triangle_height < 2 {
+        return;
+    }
+    let center_y = origin_y + triangle_height / 2;
+    for column in 0..triangle_width {
+        let half_span =
+            (triangle_width - 1 - column) * (triangle_height / 2) / (triangle_width - 1);
+        for y in center_y.saturating_sub(half_span)..=center_y + half_span {
+            put_pixel(buffer, width, height, origin_x + column, y, TEXT_COLOR);
         }
     }
 }
@@ -434,6 +583,13 @@ fn put_pixel(buffer: &mut [u32], width: usize, height: usize, x: usize, y: usize
     if x < width && y < height {
         buffer[y * width + x] = color
     }
+}
+
+fn put_pixel_signed(buffer: &mut [u32], width: usize, height: usize, x: i32, y: i32, color: u32) {
+    let (Ok(x), Ok(y)) = (usize::try_from(x), usize::try_from(y)) else {
+        return;
+    };
+    put_pixel(buffer, width, height, x, y, color);
 }
 
 #[cfg(test)]
