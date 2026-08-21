@@ -7,6 +7,8 @@ mod game_state;
 mod level;
 mod minimap;
 mod mouse_look;
+mod music;
+mod music_ui;
 mod player;
 mod raycaster;
 mod texture;
@@ -42,6 +44,9 @@ fn main() {
     let raycaster = raycaster::Raycaster::new(WIDTH, HEIGHT, raycaster::DEFAULT_FOV);
     let minimap = minimap::Minimap::new(&level);
     let mut game_state = game_state::GameState::Menu;
+    let mut music = music::MusicPlayer::new();
+    let mut music_ui = music_ui::MusicUi::new();
+    let mut music_controls_active = false;
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let now = Instant::now();
@@ -50,9 +55,11 @@ fn main() {
 
         let start_pressed = window.is_key_pressed(Key::Enter, KeyRepeat::No)
             || window.is_key_pressed(Key::Space, KeyRepeat::No);
+        let toggle_music_controls = window.is_key_pressed(Key::Tab, KeyRepeat::No);
 
         match game_state {
             game_state::GameState::Menu => {
+                music_controls_active = false;
                 mouse_look.release(&mut window);
                 game_state::draw_menu(&mut buffer, WIDTH, HEIGHT);
                 if start_pressed {
@@ -61,13 +68,39 @@ fn main() {
                 }
             }
             game_state::GameState::Playing => {
-                let mouse_delta_x = mouse_look.update(&mut window);
+                if toggle_music_controls {
+                    music_controls_active = !music_controls_active;
+                }
+                let mouse_delta_x = if music_controls_active {
+                    mouse_look.release(&mut window);
+                    0.0
+                } else {
+                    mouse_look.update(&mut window)
+                };
+                if window.is_key_pressed(Key::P, KeyRepeat::No) {
+                    music.toggle_pause();
+                }
+                if window.is_key_pressed(Key::N, KeyRepeat::No) {
+                    music.next();
+                }
+                if window.is_key_pressed(Key::M, KeyRepeat::No) {
+                    music.toggle_mute();
+                }
+                music_ui.handle_mouse(&window, &music, music_controls_active, WIDTH, HEIGHT);
                 update_player(&window, &level, &mut player, delta_time, mouse_delta_x);
                 raycaster.render(&mut buffer, &level, &textures, &player);
                 minimap.draw(&mut buffer, WIDTH, HEIGHT, &player);
+                music_ui.draw(
+                    &mut buffer,
+                    WIDTH,
+                    HEIGHT,
+                    music.snapshot(),
+                    music_controls_active,
+                );
                 game_state.check_goal(&player, level.goal);
             }
             game_state::GameState::Success => {
+                music_controls_active = false;
                 mouse_look.release(&mut window);
                 game_state::draw_success(&mut buffer, WIDTH, HEIGHT);
                 if start_pressed {
@@ -75,6 +108,7 @@ fn main() {
                 }
             }
         }
+        music.sync_game_state(game_state == game_state::GameState::Playing);
         fps_counter.draw(&mut buffer, WIDTH, HEIGHT);
         window
             .update_with_buffer(&buffer, WIDTH, HEIGHT)
